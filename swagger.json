@@ -1,0 +1,88 @@
+{
+  "swagger": "2.0",
+  "paths": {
+    "/auth/events": {
+      "get": {
+        "description": "Get Events by JWT location value",
+        "produces": [
+          "application/json",
+          "schemes: Events"
+        ],
+        "tags": [
+          "get"
+        ],
+        "operationId": "events",
+        "responses": {
+          "200": {
+            "description": "Events",
+            "schema": {
+              "$ref": "#/definitions/Events"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Event": {
+      "type": "object",
+      "title": "Event ...",
+      "properties": {
+        "Title": {
+          "type": "string"
+        },
+        "availableSeats": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "AvailableSeats"
+        },
+        "date": {
+          "type": "string",
+          "x-go-name": "Date"
+        },
+        "image": {
+          "type": "string",
+          "x-go-name": "ImageURL"
+        },
+        "location": {
+          "type": "string",
+          "x-go-name": "Location"
+        }
+      },
+      "x-go-package": "go-jwt"
+    },
+    "Events": {
+      "type": "object",
+      "title": "Events ...",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Event"
+          },
+          "x-go-name": "Events"
+        }
+      },
+      "x-go-package": "go-jwt"
+    },
+    "User": {
+      "description": "User used to generate token payload",
+      "type": "object",
+      "properties": {
+        "Admin": {
+          "type": "boolean"
+        },
+        "Location": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Sub": {
+          "type": "string"
+        }
+      },
+      "x-go-package": "go-jwt"
+    }
+  }
+}

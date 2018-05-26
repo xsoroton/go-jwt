@@ -1,28 +1,20 @@
 package main
 
 import (
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
 
+	"go-jwt/models"
+
 	"github.com/appleboy/gin-jwt"
 	"github.com/gin-gonic/gin"
+	"github.com/icrowley/fake"
+	"github.com/sirupsen/logrus"
 )
 
-func helloHandler(c *gin.Context) {
-	claims := jwt.ExtractClaims(c)
-	c.JSON(200, gin.H{
-		"userID": claims["id"],
-		"text":   "Hello World.",
-	})
-}
-
-// User demo
-type User struct {
-	UserName  string
-	FirstName string
-	LastName  string
-}
+const numberOfEvents = 5
 
 func main() {
 	port := os.Getenv("PORT")
@@ -35,27 +27,74 @@ func main() {
 	}
 
 	// the jwt middleware
-	authMiddleware := &jwt.GinJWTMiddleware{
+	authMiddleware := GinJWTMiddleware()
+
+	r.POST("/login", authMiddleware.LoginHandler)
+
+	auth := r.Group("/auth")
+	auth.Use(authMiddleware.MiddlewareFunc())
+	{
+		auth.GET("/refresh_token", authMiddleware.RefreshHandler)
+		auth.GET("/events", GetUserEvents)
+	}
+
+	http.ListenAndServe(":"+port, r)
+}
+
+// GetUserEvents ...
+func GetUserEvents(c *gin.Context) {
+	// swagger:route GET /auth/events get events
+	//
+	// Get Events by JWT location value
+	// ---
+	// produces:
+	// - application/json
+	//
+	// schemes: Events
+	//
+	// responses:
+	//  200: models.Events
+	//
+	var location string
+	claims := jwt.ExtractClaims(c)
+	logrus.Infof("Extracted data from token: %#v", claims)
+	//if reflect.TypeOf(claims["location"]) == reflect.Interface {
+	//	c.JSON(200, GetEvents(``))
+	//}
+	if len(claims["location"].(string)) > 0 {
+		logrus.Infof("Get events for location: %v", claims["location"])
+		location = claims["location"].(string)
+	}
+	c.JSON(200, GetEvents(location))
+}
+
+// GetEvents return array of Events
+func GetEvents(location string) models.Events {
+	return models.Events{GenerateFakeEvents(numberOfEvents, location)}
+}
+
+// GinJWTMiddleware handle JWT for GIN
+func GinJWTMiddleware() *jwt.GinJWTMiddleware{
+	return &jwt.GinJWTMiddleware{
 		Realm:      "test zone",
-		Key:        []byte("secret key"),
-		Timeout:    time.Hour,
-		MaxRefresh: time.Hour,
+		Key:        []byte("secret"),
+		Timeout:    time.Hour * 24,
+		MaxRefresh: time.Hour * 24,
 		Authenticator: func(userId string, password string, c *gin.Context) (interface{}, bool) {
 			if (userId == "admin" && password == "admin") || (userId == "test" && password == "test") {
-				return &User{
-					UserName:  userId,
-					LastName:  "Bo-Yi",
-					FirstName: "Wu",
+				return models.User{
+					Name:     fake.FullName(),
+					Location: fake.City(),
+					Sub:      fake.CharactersN(10),
+					Admin:    userId == "admin",
 				}, true
 			}
-
 			return nil, false
 		},
 		Authorizator: func(user interface{}, c *gin.Context) bool {
 			if user.(string) == "admin" {
 				return true
 			}
-
 			return false
 		},
 		Unauthorized: func(c *gin.Context, code int, message string) {
@@ -64,32 +103,32 @@ func main() {
 				"message": message,
 			})
 		},
-		// TokenLookup is a string in the form of "<source>:<name>" that is used
-		// to extract token from the request.
-		// Optional. Default value "header:Authorization".
-		// Possible values:
-		// - "header:<name>"
-		// - "query:<name>"
-		// - "cookie:<name>"
+		PayloadFunc: func(data interface{}) map[string]interface{} {
+			logrus.Infof("Fake data %#v", data)
+			user := data.(models.User)
+			return map[string]interface{}{"name": user.Name, "location": user.Location, "sub": user.Sub, "admin": user.Admin}
+		},
 		TokenLookup: "header:Authorization",
-		// TokenLookup: "query:token",
-		// TokenLookup: "cookie:token",
-
 		// TokenHeadName is a string in the header. Default value is "Bearer"
 		TokenHeadName: "Bearer",
-
-		// TimeFunc provides the current time. You can override it to use another time value. This is useful for testing or if your server uses a different time zone than your tokens.
 		TimeFunc: time.Now,
 	}
+}
 
-	r.POST("/login", authMiddleware.LoginHandler)
-
-	auth := r.Group("/auth")
-	auth.Use(authMiddleware.MiddlewareFunc())
-	{
-		auth.GET("/hello", helloHandler)
-		auth.GET("/refresh_token", authMiddleware.RefreshHandler)
+// GenerateFakeEvents ...
+func GenerateFakeEvents(n int, location string) (events []models.Event) {
+	// if location is not set make make it random
+	if len(location) == 0 {
+		location = fake.City()
 	}
-
-	http.ListenAndServe(":"+port, r)
+	for i := 1; i <= n; i++ {
+		events = append(events, models.Event{
+			Title:          fake.Title(),
+			Date:           time.Now().UTC().AddDate(0, 0, rand.Intn(100)).Format(time.RFC3339),
+			ImageURL:       fake.CharactersN(10) + `.jpg`,
+			AvailableSeats: rand.Intn(10000000),
+			Location:       location,
+		})
+	}
+	return
 }
